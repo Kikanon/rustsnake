@@ -1,7 +1,6 @@
-fn main() {
-    hello_world();
-}
+pub mod game;
+use game::run;
 
-fn hello_world() {
-    println!("Hello, world!");
+fn main() {
+    run();
 }
