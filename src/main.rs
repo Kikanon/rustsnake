@@ -1,6 +1,6 @@
 pub mod game;
-use game::run;
+use game::main_game;
 
 fn main() {
-    run();
+    main_game();
 }
