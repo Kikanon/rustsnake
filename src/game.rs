@@ -25,18 +25,18 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+type MapSize = u16;
+
 struct GameState {
-    snake_length: u16,
     player_direction: Direction,
     player_draw_direction: Direction,
-    player_position: (u16, u16),
-    body_parts: VecDeque<(u16, u16)>,
+    player_position: (MapSize, MapSize),
+    body_parts: VecDeque<(MapSize, MapSize)>,
 }
 
 impl Default for GameState {
     fn default() -> Self {
         Self {
-            snake_length: 0,
             player_direction: Direction::TopDown,
             player_draw_direction: Direction::TopDown,
             player_position: (5, 5),
@@ -60,7 +60,7 @@ impl Default for Timer {
 }
 
 struct MyRustSnakeGame {
-    map_size: (u8, u8),
+    map_size: (MapSize, MapSize),
     head_img: egui::ImageSource<'static>,
     head_img_left: egui::ImageSource<'static>,
     head_img_up: egui::ImageSource<'static>,
@@ -71,12 +71,13 @@ struct MyRustSnakeGame {
     food_timer: Timer,
     game_state: GameState,
     food_location: Option<(u16, u16)>,
+    end: bool,
 }
 
 impl Default for MyRustSnakeGame {
     fn default() -> Self {
         Self {
-            map_size: (15, 17),
+            map_size: (10, 10),
             head_img: egui::include_image!("assets/snake_head.png"),
             head_img_left: egui::include_image!("assets/snake_head_left.png"),
             head_img_up: egui::include_image!("assets/snake_head_up.png"),
@@ -87,6 +88,7 @@ impl Default for MyRustSnakeGame {
             food_timer: Timer::default(),
             game_state: GameState::default(),
             food_location: None,
+            end: false,
         }
     }
 }
@@ -106,6 +108,9 @@ impl eframe::App for MyRustSnakeGame {
 
 impl MyRustSnakeGame {
     fn game_logic(&mut self) {
+        if self.end {
+            return;
+        }
         let now = std::time::Instant::now();
 
         // move timer
@@ -113,7 +118,7 @@ impl MyRustSnakeGame {
         self.move_timer.last_update = now;
         self.move_timer.elapsed_time += dt;
 
-        let mut update_interval = 0.5; // seconds
+        let mut update_interval = 0.45; // seconds
         if self.move_timer.elapsed_time >= update_interval {
             self.game_update();
             self.move_timer.elapsed_time -= update_interval;
@@ -124,7 +129,7 @@ impl MyRustSnakeGame {
         self.food_timer.last_update = now;
         self.food_timer.elapsed_time += dt;
 
-        update_interval = 5.0; // seconds
+        update_interval = 3.0; // seconds
         if self.food_timer.elapsed_time >= update_interval {
             self.spawn_food();
             self.food_timer.elapsed_time -= update_interval;
@@ -136,10 +141,32 @@ impl MyRustSnakeGame {
             return;
         }
         let mut rng = rand::rng();
-        self.food_location = Some((
-            rng.random::<u16>() % (self.map_size.0 as u16),
-            rng.random::<u16>() % (self.map_size.1 as u16),
-        ));
+        let mut next_food_location: (MapSize, MapSize);
+
+        loop {
+            next_food_location = (
+                rng.random::<MapSize>() % self.map_size.0,
+                rng.random::<MapSize>() % self.map_size.1,
+            );
+            let mut collision = false;
+
+            if next_food_location == self.game_state.player_position {
+                collision = true;
+            }
+
+            for part in self.game_state.body_parts.clone() {
+                if part == next_food_location {
+                    collision = true;
+                    break;
+                }
+            }
+
+            if collision == false {
+                break;
+            }
+        }
+
+        self.food_location = Some(next_food_location);
     }
 
     fn draw_game(&mut self, ui: &egui::Ui) {
@@ -147,7 +174,7 @@ impl MyRustSnakeGame {
         self.draw_player(ui);
     }
 
-    fn draw_background(&self, ui: &egui::Ui, map_size: (u8, u8)) {
+    fn draw_background(&self, ui: &egui::Ui, map_size: (MapSize, MapSize)) {
         let painter = ui.painter();
         let mut rect = ui.max_rect(); // The whole panel
 
@@ -165,8 +192,8 @@ impl MyRustSnakeGame {
         painter.rect_filled(rect, 0.0, Color32::GRAY); // Fill background
         painter.rect_stroke(rect, 0.0, (2.0, Color32::BLUE)); // Red border
 
-        let rows = map_size.0 as usize;
-        let cols = map_size.1 as usize;
+        let rows = map_size.0;
+        let cols = map_size.1;
         let cell_width = rect.width() / cols as f32;
         let cell_height = rect.height() / rows as f32;
 
@@ -189,14 +216,23 @@ impl MyRustSnakeGame {
 
     fn handle_input(&mut self, ui: &egui::Ui) {
         ui.input(|inp| {
+            let current_dir = self.game_state.player_draw_direction;
             if inp.keys_down.len() > 0 {
-                if inp.key_down(Key::ArrowDown) || inp.key_down(Key::S) {
+                if (inp.key_down(Key::ArrowDown) || inp.key_down(Key::S))
+                    && current_dir != Direction::BottomUp
+                {
                     self.game_state.player_direction = Direction::TopDown;
-                } else if inp.key_down(Key::ArrowUp) || inp.key_down(Key::W) {
+                } else if (inp.key_down(Key::ArrowUp) || inp.key_down(Key::W))
+                    && current_dir != Direction::TopDown
+                {
                     self.game_state.player_direction = Direction::BottomUp;
-                } else if inp.key_down(Key::ArrowRight) || inp.key_down(Key::D) {
+                } else if (inp.key_down(Key::ArrowRight) || inp.key_down(Key::D))
+                    && current_dir != Direction::RightToLeft
+                {
                     self.game_state.player_direction = Direction::LeftToRight;
-                } else if inp.key_down(Key::ArrowLeft) || inp.key_down(Key::A) {
+                } else if (inp.key_down(Key::ArrowLeft) || inp.key_down(Key::A))
+                    && current_dir != Direction::LeftToRight
+                {
                     self.game_state.player_direction = Direction::RightToLeft;
                 }
             }
@@ -231,37 +267,62 @@ impl MyRustSnakeGame {
         }
     }
 
+    fn stop_game(&mut self) {
+        println!("GAME OVER!");
+        self.end = true;
+    }
+
     fn game_update(&mut self) {
         let prev_player_pos = self.game_state.player_position;
+        let mut next_player_pos = self.game_state.player_position;
 
-        // move the head
+        // where we going
         match self.game_state.player_direction {
             Direction::TopDown => {
-                self.game_state.player_position.0 =
-                    (self.game_state.player_position.0 + 1) % self.map_size.0 as u16;
+                if next_player_pos.0 + 1 < self.map_size.0 {
+                    next_player_pos.0 += 1;
+                }
             }
             Direction::BottomUp => {
-                self.game_state.player_position.0 =
-                    (self.game_state.player_position.0 + self.map_size.0 as u16 - 1)
-                        % self.map_size.0 as u16;
+                if next_player_pos.0 > 0 {
+                    next_player_pos.0 -= 1;
+                }
             }
             Direction::LeftToRight => {
-                self.game_state.player_position.1 =
-                    (self.game_state.player_position.1 + 1) % self.map_size.1 as u16;
+                if next_player_pos.1 + 1 < self.map_size.1 {
+                    next_player_pos.1 += 1;
+                }
             }
             Direction::RightToLeft => {
-                self.game_state.player_position.1 =
-                    (self.game_state.player_position.1 + self.map_size.1 as u16 - 1)
-                        % self.map_size.1 as u16;
+                if next_player_pos.1 > 0 {
+                    next_player_pos.1 -= 1;
+                }
             }
         }
+
+        let mut collision = false;
+
+        for part in self.game_state.body_parts.clone() {
+            if part == next_player_pos {
+                collision = true;
+            }
+        }
+
+        if next_player_pos == prev_player_pos || collision {
+            self.stop_game();
+            return;
+        }
+
+        // here we test collision and end game perhaps
+
+        self.game_state.player_position = next_player_pos;
 
         self.game_state.body_parts.push_front(prev_player_pos);
 
         if self.game_state.player_position
             == self
                 .food_location
-                .unwrap_or((self.map_size.0 as u16, self.map_size.1 as u16))
+                .unwrap_or((self.map_size.0, self.map_size.1))
         {
             self.food_location = None;
         } else {
@@ -275,11 +336,11 @@ impl MyRustSnakeGame {
         &self,
         ui: &egui::Ui,
         image: egui::ImageSource<'static>,
-        grid_pos: (u16, u16),
-        map_size: (u8, u8),
+        grid_pos: (MapSize, MapSize),
+        map_size: (MapSize, MapSize),
     ) {
-        let rows = map_size.0 as usize;
-        let cols = map_size.1 as usize;
+        let rows = map_size.0;
+        let cols = map_size.1;
         let mut rect = ui.max_rect();
 
         // Make it a square and center it
