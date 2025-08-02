@@ -88,7 +88,7 @@ impl Default for MyRustSnakeGame {
             food_timer: Timer::default(),
             game_state: GameState::default(),
             food_location: None,
-            end: false,
+            end: true,
         }
     }
 }
@@ -169,9 +169,53 @@ impl MyRustSnakeGame {
         self.food_location = Some(next_food_location);
     }
 
-    fn draw_game(&mut self, ui: &egui::Ui) {
+    fn draw_game(&mut self, ui: &mut egui::Ui) {
         self.draw_background(ui, self.map_size);
         self.draw_player(ui);
+        if self.end{
+            self.draw_menu(ui)
+        }
+    }
+
+    fn draw_menu(&mut self, ui: &mut egui::Ui) {
+        let panel_rect = ui.max_rect();
+        let frame_width = panel_rect.width() * 0.5;
+        let frame_height = panel_rect.height() * 0.4;
+        let frame_x = panel_rect.center().x - frame_width / 2.0;
+        let frame_y = panel_rect.center().y - frame_height / 2.0;
+        let frame_rect = egui::Rect::from_min_size(
+            egui::pos2(frame_x, frame_y),
+            egui::vec2(frame_width, frame_height),
+        );
+
+        ui.painter().rect_filled(frame_rect, 10.0, Color32::DARK_GRAY);
+        ui.painter().rect_stroke(frame_rect, 10.0, (2.0, Color32::WHITE));
+
+        let mut menu_ui = ui.child_ui(frame_rect, ui.layout().clone());
+
+        menu_ui.vertical_centered(|ui| {
+            ui.heading("RustSnake");
+            ui.label("Press Start to play!");
+            ui.add_space(16.0);
+
+            if self.end {
+                let snake_length = self.game_state.body_parts.len() + 1;
+                ui.label(format!("Final snake length: {}", snake_length));
+            }
+
+            ui.add_space(16.0);
+
+            let start_btn = egui::Button::new("Start")
+                .min_size(egui::vec2(120.0, 40.0))
+                .wrap(true);
+            if ui.add(start_btn).clicked() {
+                self.end = false;
+                self.game_state = GameState::default();
+                self.food_location = None;
+                self.move_timer = Timer::default();
+                self.food_timer = Timer::default();
+            }
+        });
     }
 
     fn draw_background(&self, ui: &egui::Ui, map_size: (MapSize, MapSize)) {
@@ -301,7 +345,7 @@ impl MyRustSnakeGame {
         }
 
         let mut collision = false;
-
+        
         for part in self.game_state.body_parts.clone() {
             if part == next_player_pos {
                 collision = true;
@@ -330,6 +374,13 @@ impl MyRustSnakeGame {
         }
 
         self.game_state.player_draw_direction = self.game_state.player_direction;
+
+        // you won man
+        let snake_length = self.game_state.body_parts.len() + 1;
+        let max_length = (self.map_size.0 * self.map_size.1) as usize;
+        if snake_length >= max_length {
+            self.stop_game();
+        }
     }
 
     fn draw_at_cell(
