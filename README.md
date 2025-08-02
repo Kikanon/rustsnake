@@ -8,3 +8,11 @@ First build with : `cargo build`\
 Then run with : `.\target\debug\rustsnake.exe`
 
 Or just run with `cargo run` like a normal person
+
+# Release
+
+For linux release use `cargo build --release`
+
+For Windows release use ``
+
+Idc about Mac
